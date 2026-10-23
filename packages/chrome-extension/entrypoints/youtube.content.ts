@@ -1,3 +1,4 @@
+import { fetchVideoTranscript } from '@open-nexlev/niche-engine/transcript';
 import { defineContentScript } from 'wxt/utils/define-content-script';
 
 export default defineContentScript({
@@ -128,52 +129,10 @@ export default defineContentScript({
       const videoId = new URLSearchParams(window.location.search).get('v');
       if (!videoId) throw new Error('No se detectó ID de video.');
 
-      // Buscar la URL de captionTracks en el HTML de la página actual
-      const page = await fetch(`https://www.youtube.com/watch?v=${encodeURIComponent(videoId)}`);
-      if (!page.ok) throw new Error('No se pudo cargar el video.');
-      const html = await page.text();
-      const captionMatch = html.match(/"captionTracks":\s*(\[.*?\])/);
-      if (!captionMatch) {
-        throw new Error('Este video no tiene subtítulos habilitados.');
-      }
-
-      const tracks = JSON.parse(captionMatch[1]!) as Array<{ baseUrl: string; languageCode: string }>;
-      if (!tracks.length) {
-        throw new Error('No se encontraron pistas de subtítulos.');
-      }
-
-      const trackUrl = `${tracks[0]!.baseUrl}&fmt=json3`;
-      const response = await fetch(trackUrl);
-      if (!response.ok) throw new Error('No se pudo descargar la transcripción.');
-      const data = await response.json();
-
-      const events = (data.events || []) as Array<{
-        tStartMs?: number;
-        segs?: Array<{ utf8?: string }>;
-      }>;
-
-      const lines: string[] = [];
-      for (const ev of events) {
-        if (!ev.segs) continue;
-        const text = ev.segs
-          .map((s) => s.utf8 || '')
-          .join('')
-          .replace(/\n+/g, ' ')
-          .trim();
-        if (!text) continue;
-
-        if (withTimestamps && typeof ev.tStartMs === 'number') {
-          const totalSec = Math.floor(ev.tStartMs / 1000);
-          const mm = String(Math.floor(totalSec / 60)).padStart(2, '0');
-          const ss = String(totalSec % 60).padStart(2, '0');
-          lines.push(`[${mm}:${ss}] ${text}`);
-        } else {
-          lines.push(text);
-        }
-      }
-
-      if (!lines.length) throw new Error('No hay segmentos de transcripción disponibles.');
-      return withTimestamps ? lines.join('\n') : lines.join(' ').replace(/\s+/g, ' ').trim();
+      const transcript = await fetchVideoTranscript(videoId);
+      return withTimestamps
+        ? transcript.segments.map(segment => `[${segment.timestamp}] ${segment.text}`).join('\n')
+        : transcript.cleanText;
     }
 
     // 5. Inyectar barra de herramientas en páginas de reproducción (/watch?v=...)

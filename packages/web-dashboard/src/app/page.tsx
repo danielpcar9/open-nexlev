@@ -45,24 +45,45 @@ export default function OpenNexLevDashboard() {
     title: string;
     wordCount: number;
     cleanText: string;
+    segments: { timestamp: string; text: string }[];
   } | null>(null);
 
+  const [swipeReady, setSwipeReady] = useState(false);
+  const [savingSwipe, setSavingSwipe] = useState(false);
+  async function swipeRequest(body?: unknown) {
+    const response = await fetch('/api/swipe', body ? {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
+    } : { cache: 'no-store' });
+    const data = await response.json();
+    if (!response.ok || !data.ok) throw new Error(data.error || 'No se pudo guardar el canal');
+    return data.channels as NicheChannelResult[];
+  }
   useEffect(() => {
-    const saved = localStorage.getItem('open_nexlev_swipe_file');
-    if (saved) {
+    let cancelled = false;
+    (async () => {
+      let saved = await swipeRequest();
       try {
-        setSwipeFile(JSON.parse(saved));
-      } catch {}
-    }
+        const legacy = localStorage.getItem('open_nexlev_swipe_file');
+        if (legacy) {
+          saved = await swipeRequest({ action: 'import', channels: JSON.parse(legacy) });
+          localStorage.removeItem('open_nexlev_swipe_file');
+        }
+      } catch {
+        if (!cancelled) setError('SQLite está disponible, pero no se pudieron importar los guardados antiguos. Se conservaron en el navegador.');
+      }
+      if (!cancelled) { setSwipeFile(saved); setSwipeReady(true); }
+    })().catch(err => { if (!cancelled) setError(err instanceof Error ? err.message : 'Error cargando el Swipe File'); });
+    return () => { cancelled = true; };
   }, []);
 
-  const toggleSwipeChannel = (ch: NicheChannelResult) => {
-    const exists = swipeFile.some((item) => item.channelId === ch.channelId);
-    const updated = exists
-      ? swipeFile.filter((item) => item.channelId !== ch.channelId)
-      : [...swipeFile, ch];
-    setSwipeFile(updated);
-    localStorage.setItem('open_nexlev_swipe_file', JSON.stringify(updated));
+  const toggleSwipeChannel = async (ch: NicheChannelResult) => {
+    if (!swipeReady || savingSwipe) return;
+    setSavingSwipe(true); setError('');
+    try {
+      const exists = swipeFile.some(item => item.channelId === ch.channelId);
+      setSwipeFile(await swipeRequest(exists ? { action: 'remove', channelId: ch.channelId } : { action: 'save', channel: ch }));
+    } catch (err) { setError(err instanceof Error ? err.message : 'Error guardando el canal'); }
+    finally { setSavingSwipe(false); }
   };
 
   const handleSearchNiches = async (e: React.FormEvent) => {
@@ -210,7 +231,7 @@ export default function OpenNexLevDashboard() {
                     </span>
                   </div>
                   <button
-                    onClick={() => navigator.clipboard.writeText(transcriptResult.cleanText)}
+                    onClick={() => navigator.clipboard.writeText(transcriptResult.cleanText).catch(() => setError('No se pudo copiar. Selecciona el texto y cópialo manualmente.'))}
                     style={{ padding: '8px 14px', borderRadius: '6px', background: '#16a34a', color: '#fff', border: 'none', fontWeight: 600, cursor: 'pointer' }}
                   >
                     📋 Copiar Guion al Portapapeles
@@ -355,6 +376,7 @@ export default function OpenNexLevDashboard() {
                       </div>
 
                       <button
+                        disabled={!swipeReady || savingSwipe}
                         onClick={() => toggleSwipeChannel(ch)}
                         style={{
                           padding: '8px 14px',

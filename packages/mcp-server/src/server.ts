@@ -72,7 +72,9 @@ server.tool(
     includeTimestamps: z.boolean().optional().default(false).describe('Si es true, devuelve cada línea con su marca de tiempo [MM:SS]'),
   },
   async ({ videoIdOrUrl, includeTimestamps }) => {
-    const transcript = await engine.getVideoTranscript(videoIdOrUrl);
+    let transcript;
+    try { transcript = await engine.getVideoTranscript(videoIdOrUrl); }
+    catch (error) { return { isError: true, content: [{ type: 'text' as const, text: error instanceof Error ? error.message : 'Error extrayendo transcripción' }] }; }
     if (!transcript) {
       return {
         content: [{ type: 'text', text: 'No se encontró transcripción disponible para este video.' }],

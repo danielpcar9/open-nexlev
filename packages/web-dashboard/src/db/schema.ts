@@ -26,3 +26,10 @@ export const videos = sqliteTable('videos', {
   thumbnailUrl: text('thumbnail_url'),
   url: text('url').notNull(),
 });
+
+// A saved analysis is a snapshot, including the outliers and RPM assumptions.
+export const savedChannels = sqliteTable('saved_channels', {
+  id: text('id').primaryKey(),
+  snapshot: text('snapshot', { mode: 'json' }).$type<import('@open-nexlev/niche-engine').NicheChannelResult>().notNull(),
+  savedAt: integer('saved_at').notNull(),
+});

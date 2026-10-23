@@ -7,7 +7,8 @@
     "build": "next build --webpack",
     "start": "next start",
     "db:push": "drizzle-kit push",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test": "tsx --test src/db/*.test.ts"
   },
   "dependencies": {
     "@open-nexlev/niche-engine": "*",
@@ -16,7 +17,8 @@
     "next": "^16.4.3",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
-    "youtubei.js": "^18.3.0"
+    "youtubei.js": "^18.3.0",
+    "zod": "^3.23.8"
   },
   "devDependencies": {
     "@types/better-sqlite3": "^7.6.11",
@@ -24,6 +26,7 @@
     "@types/react": "^18.3.3",
     "@types/react-dom": "^18.3.0",
     "drizzle-kit": "^0.31.11",
-    "typescript": "^5.5.0"
+    "typescript": "^5.5.0",
+    "tsx": "^4.15.0"
   }
 }

@@ -25,8 +25,16 @@
 ## Pendientes y límites
 
 - No se verificó la interacción visual de la extensión dentro de Chrome ni la copia real al portapapeles.
-- La prueba real de transcripción devolvió `null` y youtubei.js emitió errores de su parser (`MenuCustomIconItem: Text is not defined`). El extractor necesita más trabajo; no se considera verificado de extremo a extremo.
-- Swipe File usa localStorage; el esquema SQLite todavía no tiene integración con la aplicación.
+- Resuelto: se sustituyó el recorrido de `getInfo/getTranscript` por metadatos del reproductor Android y pistas JSON3. Prueba real exitosa con dos videos; se conservan texto, conteo y timestamps.
+- Resuelto: Swipe File conectado a Drizzle/SQLite, con importación de localStorage sin sobrescribir snapshots ya guardados.
 - `npm audit` conserva cuatro avisos moderados en la cadena de herramientas de desarrollo de Drizzle/esbuild. No quedan avisos altos o críticos en el árbol instalado tras las actualizaciones. No equivale a una auditoría integral de seguridad.
-- El código todavía utiliza adaptadores con `any` para algunas respuestas de YouTube y devuelve `null` cuando falla el análisis o extracción. Conviene añadir diagnósticos estructurados y fixtures para más formatos.
+- El código todavía utiliza adaptadores con `any` para algunas respuestas de YouTube y devuelve `null` cuando falla el análisis de canal. La extracción ahora devuelve errores tipados. Conviene añadir diagnósticos estructurados y fixtures para más formatos.
 - React 18 compila, pero Next.js 16 avisa que su soporte está deprecado.
+
+## Segunda revisión: transcripciones y persistencia
+
+- Extractor compartido por motor, MCP y extensión; validación estricta de URLs y límite de tiempo.
+- API de transcripciones devuelve 400/404/502/504 según el tipo de error.
+- API Swipe File con validación, guardado idempotente, borrado e importación transaccional.
+- SQLite con WAL y busy timeout; tabla aditiva, sin eliminar el esquema previo.
+- Nueve pruebas automatizadas: métricas, URLs, JSON3, errores upstream y persistencia tras cerrar/reabrir la base.

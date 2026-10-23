@@ -13,7 +13,7 @@
     "test:engine": "npm --workspace=@open-nexlev/niche-engine run test",
     "typecheck": "npm run typecheck --workspaces --if-present",
     "build": "npm run build --workspace=@open-nexlev/web-dashboard && npm run build --workspace=@open-nexlev/chrome-extension",
-    "test": "npm --workspace=@open-nexlev/niche-engine run test:unit"
+    "test": "npm --workspace=@open-nexlev/niche-engine run test:unit && npm --workspace=@open-nexlev/web-dashboard test"
   },
   "engines": {
     "node": ">=22"

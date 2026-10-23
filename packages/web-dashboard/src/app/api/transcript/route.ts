@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { NicheFinderEngine } from '@open-nexlev/niche-engine';
+import { NicheFinderEngine, TranscriptError } from '@open-nexlev/niche-engine';
 
 const engine = new NicheFinderEngine();
 
@@ -20,9 +20,13 @@ export async function POST(req: NextRequest) {
     }
 
     return NextResponse.json({ ok: true, transcript });
-  } catch (error: any) {
+  } catch (error: unknown) {
+    if (error instanceof TranscriptError) {
+      const status = error.code === 'INVALID_VIDEO' ? 400 : error.code === 'NO_CAPTIONS' || error.code === 'VIDEO_UNAVAILABLE' ? 404 : error.code === 'TIMEOUT' ? 504 : 502;
+      return NextResponse.json({ ok: false, code: error.code, error: error.message }, { status });
+    }
     return NextResponse.json(
-      { ok: false, error: error?.message || 'Error extrayendo transcripción' },
+      { ok: false, error: 'Error extrayendo transcripción' },
       { status: 500 }
     );
   }

@@ -1,3 +1,5 @@
+import { fetchVideoTranscript } from './transcript.js';
+export { TranscriptError, parseVideoId } from './transcript.js';
 import { Innertube, UniversalCache } from 'youtubei.js';
 
 export interface NicheFilter {
@@ -52,7 +54,7 @@ export function parseMetricText(text?: string): number {
   const match = text.trim().toUpperCase().match(/([\d.,]+)\s*(MIL|K|M|B)?/);
   if (!match) return 0;
   const unit = match[2];
-  const raw = unit ? match[1].replace(',', '.') : match[1].replace(/[.,]/g, '');
+  const raw = unit ? match[1]!.replace(',', '.') : match[1]!.replace(/[.,]/g, '');
   let value = Number(raw);
   if (!Number.isFinite(value)) return 0;
   if (unit === 'K' || unit === 'MIL') value *= 1_000;
@@ -67,8 +69,8 @@ export function calculateMedian(values: number[]): number {
   const sorted = [...values].sort((a, b) => a - b);
   const mid = Math.floor(sorted.length / 2);
   return sorted.length % 2 !== 0
-    ? sorted[mid]
-    : (sorted[mid - 1] + sorted[mid]) / 2;
+    ? sorted[mid]!
+    : (sorted[mid - 1]! + sorted[mid]!) / 2;
 }
 
 export function formatMsToTimestamp(ms: number): string {
@@ -227,46 +229,7 @@ export class NicheFinderEngine {
    * Extractor de Transcripción / Guion Limpio (Sin API Key)
    * Acepta un ID de video (ej. "dQw4w9WgXcQ") o una URL completa de YouTube
    */
-  async getVideoTranscript(videoIdOrUrl: string): Promise<VideoTranscriptResult | null> {
-    await this.init();
-    try {
-      const videoIdMatch = videoIdOrUrl.match(/(?:v=|youtu\.be\/|^)([a-zA-Z0-9_-]{11})/);
-      const videoId = videoIdMatch ? videoIdMatch[1] : videoIdOrUrl;
-
-      const info = await this.yt!.getInfo(videoId);
-      const title = info.basic_info?.title || 'Untitled Video';
-      const transcriptData = await info.getTranscript();
-
-      const rawSegments =
-        transcriptData?.transcript?.content?.body?.initial_segments || [];
-
-      const segments: TranscriptSegment[] = rawSegments
-        .map((seg: any) => {
-          const startMs = Number(seg.start_ms || 0);
-          const endMs = Number(seg.end_ms || startMs);
-          const text = (seg.snippet?.text || '').replace(/\s+/g, ' ').trim();
-          return {
-            startMs,
-            endMs,
-            timestamp: formatMsToTimestamp(startMs),
-            text,
-          };
-        })
-        .filter((s: TranscriptSegment) => s.text.length > 0);
-
-      if (!segments.length) return null;
-      const cleanText = segments.map((s) => s.text).join(' ');
-      const wordCount = cleanText.split(/\s+/).filter(Boolean).length;
-
-      return {
-        videoId,
-        title,
-        cleanText,
-        wordCount,
-        segments,
-      };
-    } catch (error) {
-      return null;
-    }
+  async getVideoTranscript(videoIdOrUrl: string): Promise<VideoTranscriptResult> {
+    return fetchVideoTranscript(videoIdOrUrl);
   }
 }
