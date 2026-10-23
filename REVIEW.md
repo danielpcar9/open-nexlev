@@ -38,3 +38,7 @@
 - API Swipe File con validación, guardado idempotente, borrado e importación transaccional.
 - SQLite con WAL y busy timeout; tabla aditiva, sin eliminar el esquema previo.
 - Nueve pruebas automatizadas: métricas, URLs, JSON3, errores upstream y persistencia tras cerrar/reabrir la base.
+- Validación final desde una instalación limpia con Node 22: TypeScript, nueve pruebas y builds de Next.js/Chrome MV3 completados.
+- Prueba HTTP de guardado, importación idempotente, rechazo de datos inválidos, borrado y persistencia tras reiniciar el servidor: completada. Prueba real de transcripción por HTTP: completada.
+- Prueba MCP real con timestamps y rechazo de URL inválida: completada.
+- GitHub Actions no inició los jobs: la cuenta reportó un bloqueo de facturación. La validación anterior se ejecutó localmente.

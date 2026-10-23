@@ -26,8 +26,12 @@ export async function GET() {
 }
 export async function POST(req: NextRequest) {
   // This local application has no accounts. Reject writes from another origin.
-  if (req.headers.get('origin') && req.headers.get('origin') !== req.nextUrl.origin)
-    return NextResponse.json({ ok: false, error: 'Origen no permitido' }, { status: 403 });
+  const origin = req.headers.get('origin');
+  if (origin) {
+    let allowed = false;
+    try { const source = new URL(origin); allowed = ['http:', 'https:'].includes(source.protocol) && source.host === req.headers.get('host'); } catch { /* Invalid Origin */ }
+    if (!allowed) return NextResponse.json({ ok: false, error: 'Origen no permitido' }, { status: 403 });
+  }
   const body = await req.json().catch(() => null);
   const parsed = z.discriminatedUnion('action', [
     z.object({ action: z.literal('save'), channel }),
