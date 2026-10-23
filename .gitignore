@@ -1,0 +1,12 @@
+node_modules/
+.next/
+.output/
+.wxt/
+dist/
+*.tsbuildinfo
+.env*
+!.env.example
+*.db
+*.db-*
+*.sqlite*
+.DS_Store

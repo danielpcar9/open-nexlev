@@ -1,0 +1,22 @@
+{
+  "name": "@open-nexlev/niche-engine",
+  "version": "1.0.0",
+  "type": "module",
+  "main": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "test": "tsx src/test.ts",
+    "typecheck": "tsc --noEmit",
+    "test:unit": "tsx --test src/*.test.ts"
+  },
+  "dependencies": {
+    "youtubei.js": "^18.3.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.14.0",
+    "tsx": "^4.15.0",
+    "typescript": "^5.5.0"
+  }
+}

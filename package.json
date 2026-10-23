@@ -1,0 +1,21 @@
+{
+  "name": "open-nexlev",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Open Source YouTube Niche Finder, Outlier Detector Chrome Extension & MCP Server",
+  "workspaces": [
+    "packages/*"
+  ],
+  "scripts": {
+    "dev:dashboard": "npm --workspace=@open-nexlev/web-dashboard run dev",
+    "dev:extension": "npm --workspace=@open-nexlev/chrome-extension run dev",
+    "start:mcp": "npm --workspace=@open-nexlev/mcp-server run start",
+    "test:engine": "npm --workspace=@open-nexlev/niche-engine run test",
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "build": "npm run build --workspace=@open-nexlev/web-dashboard && npm run build --workspace=@open-nexlev/chrome-extension",
+    "test": "npm --workspace=@open-nexlev/niche-engine run test:unit"
+  },
+  "engines": {
+    "node": ">=22"
+  }
+}
