@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 import { getStore } from '../../../db/store';
+import { guardWrite } from '../../../http/guard';
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 const metric = z.number().finite().nonnegative();
@@ -17,30 +18,23 @@ const channel = z.object({
     thumbnailUrl: z.string().url().refine(url => /^https:\/\/i\.ytimg\.com\//.test(url)),
   })).max(100),
 });
+const body = z.discriminatedUnion('action', [
+  z.object({ action: z.literal('save'), channel }),
+  z.object({ action: z.literal('remove'), channelId: channel.shape.channelId }),
+  z.object({ action: z.literal('import'), channels: z.array(channel).max(500) }),
+]);
 function failure(error: unknown) {
-  console.error('Swipe File:', error instanceof Error ? error.message : 'Database failure');
+  console.error('Swipe File:', error instanceof Error ? error.name : 'Database failure');
   return NextResponse.json({ ok: false, error: 'No se pudo acceder al Swipe File. Revisa la ruta y permisos de SQLite.' }, { status: 500 });
 }
 export async function GET() {
   try { return NextResponse.json({ ok: true, channels: getStore().list() }); } catch (error) { return failure(error); }
 }
 export async function POST(req: NextRequest) {
-  // This local application has no accounts. Reject writes from another origin.
-  const origin = req.headers.get('origin');
-  if (origin) {
-    let allowed = false;
-    try { const source = new URL(origin); allowed = ['http:', 'https:'].includes(source.protocol) && source.host === req.headers.get('host'); } catch { /* Invalid Origin */ }
-    if (!allowed) return NextResponse.json({ ok: false, error: 'Origen no permitido' }, { status: 403 });
-  }
-  const body = await req.json().catch(() => null);
-  const parsed = z.discriminatedUnion('action', [
-    z.object({ action: z.literal('save'), channel }),
-    z.object({ action: z.literal('remove'), channelId: channel.shape.channelId }),
-    z.object({ action: z.literal('import'), channels: z.array(channel).max(500) }),
-  ]).safeParse(body);
-  if (!parsed.success) return NextResponse.json({ ok: false, error: 'Datos de canal inválidos' }, { status: 400 });
+  const guarded = await guardWrite(req, body, 'Datos de canal inválidos');
+  if (!guarded.ok) return guarded.response;
   try {
-    const store = getStore(); const data = parsed.data;
+    const store = getStore(); const data = guarded.data;
     if (data.action === 'save') store.save(data.channel);
     else if (data.action === 'remove') store.remove(data.channelId);
     else store.import(data.channels);

@@ -1,6 +1,16 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { parseMetricText } from './index.js';
+import { parsePublicCounter } from './metrics/parse.js';
 import { fetchVideoTranscript, parseVideoId, parseJson3, TranscriptError } from './transcript.js';
+
+test('REG-02 missing explorer text stays zero while a public counter and a transcript stay honest', () => {
+  assert.equal(parseMetricText(undefined), 0);
+  assert.equal(parseMetricText(''), 0);
+  assert.equal(parsePublicCounter('').value, null);
+  assert.equal(parsePublicCounter('').precision, 'unknown');
+  assert.equal(parseJson3({ events: [{ tStartMs: 1000, dDurationMs: 500, segs: [{ utf8: 'café' }] }] })[0]?.text, 'café');
+});
 
 test('accepts video IDs and supported YouTube URLs, rejects foreign hosts and partial IDs', () => {
   for (const input of ['dQw4w9WgXcQ', 'https://youtu.be/dQw4w9WgXcQ?t=10', 'https://www.youtube.com/watch?v=dQw4w9WgXcQ&list=test', 'https://m.youtube.com/shorts/dQw4w9WgXcQ', 'https://youtube.com/live/dQw4w9WgXcQ']) assert.equal(parseVideoId(input), 'dQw4w9WgXcQ');

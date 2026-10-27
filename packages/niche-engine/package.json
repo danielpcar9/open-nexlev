@@ -5,12 +5,13 @@
   "main": "./src/index.ts",
   "exports": {
     ".": "./src/index.ts",
-    "./transcript": "./src/transcript.ts"
+    "./transcript": "./src/transcript.ts",
+    "./revenue": "./src/metrics/revenue.ts"
   },
   "scripts": {
     "test": "tsx src/test.ts",
     "typecheck": "tsc --noEmit",
-    "test:unit": "tsx --test src/*.test.ts"
+    "test:unit": "tsx --test src/metrics.test.ts src/transcript.test.ts src/metrics/*.test.ts src/providers/*.test.ts"
   },
   "dependencies": {
     "youtubei.js": "^18.3.0"

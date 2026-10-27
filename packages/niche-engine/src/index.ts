@@ -1,6 +1,24 @@
 import { fetchVideoTranscript } from './transcript.js';
 export { TranscriptError, parseVideoId } from './transcript.js';
 import { Innertube, UniversalCache } from 'youtubei.js';
+import { parsePublicCounter } from './metrics/parse.js';
+import { calculateMedian } from './metrics/median.js';
+
+export { parsePublicCounter, resolutionFor } from './metrics/parse.js';
+export { calculateMedian } from './metrics/median.js';
+export { EngineError } from './types.js';
+export type { MetricValue, Precision, ObservationMeta, ProviderId, ContentKind, EngineErrorCode, WindowMetric, WindowQuality, CounterPoint, ChannelCapture, ChannelCaptureVideo } from './types.js';
+export { computeWindow, projectMonthly, describeCounter, compareGrowth, weeklyGrowth, observationInstants, splitByProvider, endpointResolution } from './metrics/windows.js';
+export { outlierReference, channelOutlierCounts } from './metrics/outliers.js';
+export type { VideoSample, OutlierReference } from './metrics/outliers.js';
+export { computeOpportunityScore, assertWeights, averageRankPercentile, DEFAULT_WEIGHTS, SCORE_VERSION } from './metrics/score.js';
+export type { ScoreWeights, ProjectFacts, OpportunityScore, ScoreComponent } from './metrics/score.js';
+export { buildRevenueScenarios } from './metrics/revenue.js';
+export type { RevenueScenario, ViewMix } from './metrics/revenue.js';
+export { titlePatterns, suggestLanguage, normalizeTitle } from './metrics/titles.js';
+export type { PatternRow } from './metrics/titles.js';
+export { captureInnertube, classifyInnertubeVideo } from './providers/innertube.js';
+export { captureYouTubeDataApi, youtubeDataApiEnabled, YOUTUBE_API_RETENTION_DAYS } from './providers/youtube-data.js';
 
 export interface NicheFilter {
   query: string;
@@ -48,29 +66,9 @@ export interface VideoTranscriptResult {
   segments: TranscriptSegment[];
 }
 
-// Utilidad para convertir textos como "1.2M views", "45K subscribers" a números reales
+// Utilidad histórica: un texto ausente sigue devolviendo 0 para no cambiar el contrato del explorador.
 export function parseMetricText(text?: string): number {
-  if (!text) return 0;
-  const match = text.trim().toUpperCase().match(/([\d.,]+)\s*(MIL|K|M|B)?/);
-  if (!match) return 0;
-  const unit = match[2];
-  const raw = unit ? match[1]!.replace(',', '.') : match[1]!.replace(/[.,]/g, '');
-  let value = Number(raw);
-  if (!Number.isFinite(value)) return 0;
-  if (unit === 'K' || unit === 'MIL') value *= 1_000;
-  if (unit === 'M') value *= 1_000_000;
-  if (unit === 'B') value *= 1_000_000_000;
-
-  return Math.round(value);
-}
-
-export function calculateMedian(values: number[]): number {
-  if (values.length === 0) return 0;
-  const sorted = [...values].sort((a, b) => a - b);
-  const mid = Math.floor(sorted.length / 2);
-  return sorted.length % 2 !== 0
-    ? sorted[mid]!
-    : (sorted[mid - 1]! + sorted[mid]!) / 2;
+  return parsePublicCounter(text).value ?? 0;
 }
 
 export function formatMsToTimestamp(ms: number): string {
@@ -175,7 +173,7 @@ export class NicheFinderEngine {
         topOutliers,
         channelUrl: `https://www.youtube.com/channel/${channelId}`,
       };
-    } catch (error) {
+    } catch {
       return null;
     }
   }
