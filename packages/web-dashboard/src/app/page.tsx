@@ -1,6 +1,10 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
+import { AlertsPanel } from '../components/alerts-panel';
+import { ResearchPanel } from '../components/research-panel';
+import { TrackingPanel } from '../components/tracking-panel';
+import { WorkerBanner } from '../components/worker-banner';
 
 interface OutlierVideo {
   id: string;
@@ -36,7 +40,7 @@ export default function OpenNexLevDashboard() {
   const [loading, setLoading] = useState(false);
   const [channels, setChannels] = useState<NicheChannelResult[]>([]);
   const [swipeFile, setSwipeFile] = useState<NicheChannelResult[]>([]);
-  const [activeTab, setActiveTab] = useState<'explorer' | 'swipe' | 'transcript'>('explorer');
+  const [activeTab, setActiveTab] = useState<'explorer' | 'swipe' | 'transcript' | 'tracking' | 'alerts' | 'research'>('explorer');
 
   // Estado para el modal/pestaña de extractor de guiones
   const [videoInput, setVideoInput] = useState('');
@@ -197,12 +201,16 @@ export default function OpenNexLevDashboard() {
           >
             📜 Extractor de Guiones
           </button>
+          <button onClick={() => setActiveTab('tracking')} style={{ padding: '10px 16px', borderRadius: '8px', border: '1px solid #334155', background: activeTab === 'tracking' ? '#7c3aed' : '#1e293b', color: '#fff', fontWeight: 600, cursor: 'pointer' }}>Seguimiento</button>
+          <button onClick={() => setActiveTab('alerts')} style={{ padding: '10px 16px', borderRadius: '8px', border: '1px solid #334155', background: activeTab === 'alerts' ? '#7c3aed' : '#1e293b', color: '#fff', fontWeight: 600, cursor: 'pointer' }}>Alertas</button>
+          <button onClick={() => setActiveTab('research')} style={{ padding: '10px 16px', borderRadius: '8px', border: '1px solid #334155', background: activeTab === 'research' ? '#7c3aed' : '#1e293b', color: '#fff', fontWeight: 600, cursor: 'pointer' }}>Investigación</button>
         </div>
       </header>
 
       <main style={{ maxWidth: '1280px', margin: '0 auto' }}>
+        <WorkerBanner />
         {error && <p role="alert" style={{ color: '#fca5a5' }}>{error}</p>}
-        {activeTab === 'transcript' ? (
+        {activeTab === 'tracking' ? <TrackingPanel /> : activeTab === 'alerts' ? <AlertsPanel /> : activeTab === 'research' ? <ResearchPanel /> : activeTab === 'transcript' ? (
           <section style={{ background: '#111827', border: '1px solid #1f2937', borderRadius: '12px', padding: '24px' }}>
             <h2 style={{ marginTop: 0, fontSize: '20px' }}>Extractor de Guiones Limpios en 1 Clic</h2>
             <div style={{ display: 'flex', gap: '12px', marginBottom: '20px' }}>
@@ -371,7 +379,7 @@ export default function OpenNexLevDashboard() {
                           <span>👥 <strong>{ch.subscribers.toLocaleString()}</strong> subs</span>
                           <span>📊 Mediana: <strong>{ch.medianViews.toLocaleString()}</strong> vistas</span>
                           <span>🚀 Ratio Vistas/Subs: <strong style={{ color: '#c084fc' }}>{ch.subscriberToViewRatio}x</strong></span>
-                          <span>💰 Ingreso Est. (8 vids/mes): <strong style={{ color: '#4ade80' }}>${monthlyRevenue.toLocaleString()}/mes</strong></span>
+                          <span>💰 Por publicación (mediana × 8 × RPM supuesto / 1000, no observado): <strong style={{ color: '#4ade80' }}>${monthlyRevenue.toLocaleString()}/mes</strong></span>
                         </div>
                       </div>
 
@@ -389,6 +397,21 @@ export default function OpenNexLevDashboard() {
                         }}
                       >
                         {isSaved ? '★ Guardado en Swipe File' : '☆ Guardar en Swipe File'}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={async () => {
+                          setError('');
+                          try {
+                            const response = await fetch('/api/tracking', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ channelId: ch.channelId, title: ch.title }) });
+                            const data = await response.json();
+                            if (!response.ok || !data.ok) throw new Error(data.error || 'No se pudo seguir el canal');
+                            setActiveTab('tracking');
+                          } catch (err) { setError(err instanceof Error ? err.message : 'No se pudo seguir el canal'); }
+                        }}
+                        style={{ padding: '8px 14px', borderRadius: '8px', border: '1px solid #475569', background: '#1e293b', color: '#fff', fontWeight: 600, cursor: 'pointer' }}
+                      >
+                        Seguir canal
                       </button>
                     </div>
 
