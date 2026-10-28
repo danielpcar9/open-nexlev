@@ -10,7 +10,7 @@
     "db:push": "drizzle-kit push",
     "worker": "tsx src/worker/index.ts",
     "typecheck": "tsc --noEmit",
-    "test": "tsx --test --test-concurrency=1 src/db/*.test.ts src/http/*.test.ts src/services/*.test.ts",
+    "test": "tsx --test --test-concurrency=1 src/db/*.test.ts src/http/*.test.ts src/services/*.test.ts src/components/*.test.ts",
     "test:integration": "tsx --test --test-concurrency=1 src/integration/*.test.ts"
   },
   "dependencies": {

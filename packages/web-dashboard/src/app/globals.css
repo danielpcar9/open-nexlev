@@ -124,6 +124,7 @@ a:hover {
   display: grid;
   grid-template-columns: 268px minmax(0, 1fr);
   min-height: 100vh;
+  min-width: 0;
 }
 
 .side {
@@ -304,6 +305,7 @@ a:hover {
   max-width: 1280px;
   width: 100%;
   margin: 0 auto;
+  min-width: 0;
 }
 
 .topbar {
@@ -462,6 +464,7 @@ a:hover {
 
 .panel {
   padding: 24px;
+  min-width: 0;
 }
 
 .panel-header {
@@ -565,15 +568,24 @@ a:hover {
 
 .filter-submit-wrap {
   display: grid;
-  grid-template-columns: 125px 1fr;
+  grid-template-columns: minmax(0, 125px) minmax(0, 1fr);
   gap: 10px;
   align-items: end;
+  min-width: 0;
 }
 
 .field {
   display: grid;
   gap: 6px;
   min-width: 0;
+}
+
+.field input,
+.field textarea,
+.field select,
+.control {
+  min-width: 0;
+  max-width: 100%;
 }
 
 .field span,
@@ -1103,11 +1115,12 @@ textarea.control,
 
 .segment-row {
   display: grid;
-  grid-template-columns: 72px 1fr;
+  grid-template-columns: 72px minmax(0, 1fr);
   gap: 12px;
   padding: 8px 0;
   border-bottom: 1px solid var(--line);
   font-size: 13px;
+  min-width: 0;
 }
 
 .segment-time {
@@ -1119,6 +1132,7 @@ textarea.control,
 .tracked-grid {
   display: grid;
   gap: 14px;
+  min-width: 0;
 }
 
 .tracked-card {
@@ -1128,6 +1142,7 @@ textarea.control,
   border: 1px solid var(--line);
   display: grid;
   gap: 14px;
+  min-width: 0;
 }
 
 .tracked-card-head {
@@ -1207,6 +1222,7 @@ textarea.control,
   border: 1px solid var(--line-strong);
   display: grid;
   gap: 16px;
+  min-width: 0;
 }
 
 .history-head {
@@ -1520,6 +1536,8 @@ textarea.control,
 
 .table-wrap {
   overflow-x: auto;
+  max-width: 100%;
+  min-width: 0;
 }
 
 .table {
@@ -1596,7 +1614,7 @@ textarea.control,
 
 @media (max-width: 860px) {
   .app {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr);
   }
   .side {
     position: sticky;
@@ -1605,6 +1623,8 @@ textarea.control,
     border-right: 0;
     border-bottom: 1px solid var(--line);
     gap: 10px;
+    min-width: 0;
+    max-width: 100%;
   }
   .side-footer {
     display: none;
@@ -1612,26 +1632,44 @@ textarea.control,
   .nav {
     flex-direction: row;
     overflow-x: auto;
+    max-width: 100%;
   }
   .nav button {
     flex: 0 0 auto;
   }
   .main {
     padding: 20px 16px 48px;
+    min-width: 0;
+    max-width: 100%;
   }
   .filters,
   .kpi-grid,
   .metrics,
   .score-grid,
   .patterns-grid,
-  .tracked-meta-grid {
-    grid-template-columns: 1fr;
+  .tracked-meta-grid,
+  .rule-grid,
+  .videos,
+  .window-cards,
+  .scenario-grid {
+    grid-template-columns: minmax(0, 1fr);
   }
   .channel-head,
   .actions,
-  .topbar {
+  .topbar,
+  .job-toast,
+  .tracked-card-head,
+  .history-head,
+  .inline-card,
+  .research-layout {
     display: grid;
     justify-content: stretch;
+    min-width: 0;
+  }
+  .mono-tag,
+  .num,
+  .tracked-title-row strong {
+    overflow-wrap: anywhere;
   }
 }
 

@@ -1,5 +1,7 @@
 'use client';
 import React, { useEffect, useState } from 'react';
+import type { CounterPoint } from '@open-nexlev/niche-engine';
+import { formatAccumulatedViews, isJobActive, jobFromCancel, jobFromPoll, jobHeadline, precisionLabel, type CaptureJobView } from './tracking-present';
 
 type WindowMetric = {
   quality: string;
@@ -39,13 +41,25 @@ async function api(url: string, init?: RequestInit) {
   return data;
 }
 
+type HistoryView = {
+  channelId: string;
+  note: string;
+  points: CounterPoint[];
+  windows: {
+    h24: WindowMetric;
+    d7: WindowMetric;
+    d30: WindowMetric;
+    projection?: { explanation: string } | null;
+  };
+};
+
 export function TrackingPanel() {
   const [channels, setChannels] = useState<Channel[]>([]);
   const [channelId, setChannelId] = useState('');
   const [error, setError] = useState('');
-  const [history, setHistory] = useState<any>(null);
+  const [history, setHistory] = useState<HistoryView | null>(null);
   const [selectedWindow, setSelectedWindow] = useState<'24h' | '7d' | '30d'>('7d');
-  const [job, setJob] = useState<{ id: string; text: string; status?: string } | null>(null);
+  const [job, setJob] = useState<CaptureJobView | null>(null);
 
   const [ruleChannelId, setRuleChannelId] = useState<string | null>(null);
   const [ruleForm, setRuleForm] = useState<AlertRule>({
@@ -66,22 +80,13 @@ export function TrackingPanel() {
   }, []);
 
   useEffect(() => {
-    if (!job?.id || job.status === 'succeeded' || job.status === 'failed' || job.status === 'cancelled') {
-      return;
-    }
+    if (!job?.id || !isJobActive(job)) return;
     const timer = setInterval(async () => {
       try {
         const data = await api(`/api/jobs/${job.id}`);
-        if (data.job) {
-          setJob({
-            id: data.job.id,
-            status: data.job.status,
-            text: `${data.job.id} (${data.job.status}${data.job.error ? ` · ${data.job.error}` : ''})`,
-          });
-          if (data.job.status === 'succeeded' || data.job.status === 'failed') {
-            load();
-          }
-        }
+        if (!data.job) return;
+        setJob(current => current ? jobFromPoll(current, data.job) : current);
+        if (data.job.status === 'succeeded' || data.job.status === 'failed' || data.job.status === 'cancelled') load();
       } catch {
         // ignore polling error
       }
@@ -206,23 +211,27 @@ export function TrackingPanel() {
           <div>
             <span className="eyebrow">Trabajo en cola</span>
             <p className="meta">
-              Trabajo: <span className="num">{job.text}</span>. La captura se procesa en segundo plano y no bloquea esta página.
+              Trabajo: <span className="num">{jobHeadline(job)}</span>.{' '}
+              {job.cancelRequested && isJobActive(job)
+                ? 'Sigue activo hasta que el worker confirme la cancelación.'
+                : 'La captura se procesa en segundo plano y no bloquea esta página.'}
             </p>
           </div>
-          {(job.status === 'queued' || job.status === 'running') && (
+          {isJobActive(job) && (
             <button
               type="button"
               className="btn tiny danger"
+              disabled={job.cancelRequested}
               onClick={async () => {
                 try {
-                  await api(`/api/jobs/${job.id}/cancel`, { method: 'POST' });
-                  setJob({ ...job, status: 'cancelled', text: `${job.id} (cancelled)` });
+                  const data = await api(`/api/jobs/${job.id}/cancel`, { method: 'POST' });
+                  setJob(jobFromCancel(data.job));
                 } catch (err) {
                   setError(err instanceof Error ? err.message : 'No se pudo cancelar');
                 }
               }}
             >
-              Cancelar captura
+              {job.cancelRequested ? 'Cancelación solicitada' : 'Cancelar captura'}
             </button>
           )}
         </div>
@@ -287,7 +296,8 @@ export function TrackingPanel() {
                     setJob({
                       id: data.jobId,
                       status: data.status,
-                      text: `${data.jobId} (${data.status}${data.created ? '' : ', ya en curso'})`,
+                      error: null,
+                      cancelRequested: false,
                     });
                   } catch (err) {
                     setError(err instanceof Error ? err.message : 'Error');
@@ -483,31 +493,24 @@ export function TrackingPanel() {
             <p className="empty">Sin puntos de historial registrados todavía.</p>
           ) : (
             <div className="table-wrap">
+              <p className="meta">Vistas acumuladas del canal. Este historial no trae suscriptores ni cantidad de videos.</p>
               <table className="table">
                 <thead>
                   <tr>
                     <th>Fecha de captura</th>
-                    <th>Suscriptores</th>
-                    <th>Vistas totales</th>
-                    <th>Videos</th>
+                    <th>Vistas acumuladas</th>
+                    <th>Precisión</th>
                     <th>Fuente</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {history.points.slice(0, 12).map((pt: any, idx: number) => (
-                    <tr key={pt.observedAt ?? idx}>
-                      <td className="num">
-                        {pt.observedAt ? new Date(pt.observedAt).toLocaleString() : '—'}
-                      </td>
-                      <td className="num">
-                        {pt.subscribers != null ? pt.subscribers.toLocaleString() : '—'}
-                      </td>
-                      <td className="num">
-                        {pt.totalViews != null ? pt.totalViews.toLocaleString() : '—'}
-                      </td>
-                      <td className="num">{pt.videoCount ?? '—'}</td>
+                  {history.points.slice(0, 12).map(point => (
+                    <tr key={point.observedAt}>
+                      <td className="num">{point.observedAt ? new Date(point.observedAt).toLocaleString() : '—'}</td>
+                      <td className="num">{formatAccumulatedViews(point.value)}</td>
+                      <td>{precisionLabel(point.precision)}</td>
                       <td>
-                        <span className="pill pill-muted">{pt.provider ?? 'innertube'}</span>
+                        <span className="pill pill-muted">{point.provider}</span>
                       </td>
                     </tr>
                   ))}
