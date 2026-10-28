@@ -29,14 +29,14 @@ test('DB-01 an old Swipe File survives migration and a second migration', () => 
     store.close();
     const raw = new Database(path, { readonly: true });
     assert.equal((raw.prepare('SELECT saved_at FROM saved_channels').get() as { saved_at: number }).saved_at, 111);
-    assert.equal((raw.prepare('SELECT COUNT(*) AS count FROM schema_migrations').get() as { count: number }).count, 5);
+    assert.equal((raw.prepare('SELECT COUNT(*) AS count FROM schema_migrations').get() as { count: number }).count, 6);
     raw.close();
     store = openStore(path);
     assert.equal(store.list()[0]?.title, 'Saved');
     store.close();
     const again = new Database(path, { readonly: true });
     assert.equal((again.prepare('SELECT saved_at FROM saved_channels').get() as { saved_at: number }).saved_at, 111);
-    assert.equal((again.prepare('SELECT COUNT(*) AS count FROM schema_migrations').get() as { count: number }).count, 5);
+    assert.equal((again.prepare('SELECT COUNT(*) AS count FROM schema_migrations').get() as { count: number }).count, 6);
     again.close();
   } finally { rmSync(folder, { recursive: true, force: true }); }
 });
@@ -53,7 +53,7 @@ test('DB-02 two processes migrate once without duplicating versions', async () =
   try {
     await Promise.all([run(), run()]);
     const raw = new Database(path, { readonly: true });
-    assert.equal((raw.prepare('SELECT COUNT(*) AS count FROM schema_migrations').get() as { count: number }).count, 5);
+    assert.equal((raw.prepare('SELECT COUNT(*) AS count FROM schema_migrations').get() as { count: number }).count, 6);
     assert.equal((raw.prepare('SELECT saved_at FROM saved_channels').get() as { saved_at: number }).saved_at, 111);
     raw.close();
   } finally { rmSync(folder, { recursive: true, force: true }); }

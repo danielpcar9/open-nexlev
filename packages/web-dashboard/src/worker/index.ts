@@ -4,12 +4,10 @@ import { Innertube, UniversalCache } from 'youtubei.js';
 import { captureInnertube, captureYouTubeDataApi, EngineError, youtubeDataApiEnabled, type ChannelCapture, type ProviderId } from '@open-nexlev/niche-engine';
 import { openDatabase } from '../db/connection';
 import { executeCaptureJob, type CaptureProvider } from '../services/capture';
-import { beat, claimJob, enqueueDueCaptures, type JobRow } from '../services/jobs';
+import { beat, claimJob, enqueueDueCaptures, jobOwnership, LEASE_MS, settleCancelled, type JobRow } from '../services/jobs';
 import { executeResearchJob, type ResearchSearcher } from '../services/research';
 import { applyRetention } from '../services/retention';
 import type Database from 'better-sqlite3';
-
-const LEASE_MS = 60_000;
 
 function concurrency(): number {
   const value = Number(process.env.PROVIDER_CONCURRENCY ?? 2);
@@ -56,17 +54,26 @@ async function handle(sqlite: Database.Database, job: JobRow, providerFor: (prov
       const payload = JSON.parse(job.payload) as { channelId: string };
       const tracked = sqlite.prepare(`SELECT provider FROM tracked_channels WHERE channel_id = ?`).get(payload.channelId) as { provider: ProviderId } | undefined;
       const provider = await providerFor(tracked?.provider ?? 'innertube');
-      await executeCaptureJob(sqlite, job, provider);
+      await executeCaptureJob(sqlite, job, provider, { leaseMs: LEASE_MS });
       return;
     }
     if (job.type === 'research_run') {
-      await executeResearchJob(sqlite, job, searcher);
+      await executeResearchJob(sqlite, job, searcher, { leaseMs: LEASE_MS });
       return;
     }
-    sqlite.prepare(`UPDATE jobs SET status = 'failed', finished_at = ?, error = 'Tipo de trabajo desconocido' WHERE id = ?`).run(Date.now(), job.id);
+    const now = Date.now();
+    if (job.lease_token && jobOwnership(sqlite, job.id, job.lease_token, now) === 'owned') {
+      sqlite.prepare(`UPDATE jobs SET status = 'failed', finished_at = ?, error = 'Tipo de trabajo desconocido', lease_owner = NULL, lease_until = NULL, lease_token = NULL WHERE id = ? AND lease_token = ? AND status = 'running'`).run(now, job.id, job.lease_token);
+    }
   } catch (error) {
+    const now = Date.now();
+    const token = job.lease_token;
+    if (!token) return;
+    const gate = jobOwnership(sqlite, job.id, token, now);
+    if (gate === 'cancelled') { settleCancelled(sqlite, job.id, token, now); return; }
+    if (gate !== 'owned') return;
     const code = error instanceof EngineError ? error.code : 'UPSTREAM';
-    sqlite.prepare(`UPDATE jobs SET status = 'failed', finished_at = ?, error = ? WHERE id = ? AND status = 'running'`).run(Date.now(), code, job.id);
+    sqlite.prepare(`UPDATE jobs SET status = 'failed', finished_at = ?, error = ?, lease_owner = NULL, lease_until = NULL, lease_token = NULL WHERE id = ? AND lease_token = ? AND status = 'running' AND cancel_requested = 0`).run(now, code, job.id, token);
   }
 }
 

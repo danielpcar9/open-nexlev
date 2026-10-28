@@ -198,4 +198,11 @@ export const MIGRATIONS: Migration[] = [
       PRIMARY KEY (channel_id, tag)
     );`,
   },
+  {
+    version: 6,
+    name: 'lease_token_and_research_sample',
+    sql: `ALTER TABLE jobs ADD COLUMN lease_token TEXT;
+    ALTER TABLE research_members ADD COLUMN in_sample INTEGER NOT NULL DEFAULT 1;
+    ALTER TABLE research_videos ADD COLUMN in_sample INTEGER NOT NULL DEFAULT 1;`,
+  },
 ];

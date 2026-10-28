@@ -103,6 +103,7 @@ export const jobs = sqliteTable('jobs', {
   nextAttemptAt: integer('next_attempt_at').notNull(),
   leaseOwner: text('lease_owner'),
   leaseUntil: integer('lease_until'),
+  leaseToken: text('lease_token'),
   progress: text('progress'),
   error: text('error'),
   cancelRequested: integer('cancel_requested').notNull().default(0),
@@ -152,5 +153,6 @@ export const researchMembers = sqliteTable('research_members', {
   outlierVideos: integer('outlier_videos').notNull().default(0),
   weeklyGrowth: real('weekly_growth'),
   growthReady: integer('growth_ready').notNull().default(0),
+  inSample: integer('in_sample').notNull().default(1),
   updatedAt: integer('updated_at').notNull(),
 }, table => [primaryKey({ columns: [table.projectId, table.channelId] })]);

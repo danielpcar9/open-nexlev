@@ -2,6 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { captureInnertube, classifyInnertubeVideo } from './innertube.js';
 import { captureYouTubeDataApi, youtubeDataApiEnabled } from './youtube-data.js';
+import { YTNodes } from 'youtubei.js';
 
 // Fixtures inventados. No son resultados de YouTube.
 test('short duration alone is unknown and an explicit Shorts overlay is short', () => {
@@ -23,6 +24,38 @@ test('innertube keeps a null channel total instead of summing the sample', async
   assert.equal(capture.videos[0]?.publishedAt, null);
   assert.equal(capture.videos[0]?.contentKind, 'long');
   assert.notEqual(capture.totalViews.value, 30);
+});
+
+const channelId = 'UCaaaaaaaaaaaaaaaaaaaaaa';
+function channelReturning(about: unknown) {
+  return {
+    metadata: { title: 'Fixture' },
+    header: { subscribers: { text: '10 subscribers' } },
+    async getAbout() { return about; },
+    async getVideos() { return { videos: [] }; },
+  };
+}
+
+test('AboutChannel metadata counters are read and a missing counter stays null', async () => {
+  const about = new YTNodes.AboutChannel({ metadata: { aboutChannelViewModel: { viewCountText: '1,234 views', videoCountText: '12 videos' } } });
+  const capture = await captureInnertube({ getChannel: async () => channelReturning(about) }, channelId, new Date('2026-10-23T00:00:00.000Z'));
+  assert.equal(about.metadata?.view_count, '1,234 views');
+  assert.equal(capture.totalViews.value, 1234);
+  assert.equal(capture.totalViews.precision, 'exact');
+  assert.equal(capture.videoCount.value, 12);
+  const missing = new YTNodes.AboutChannel({ metadata: { aboutChannelViewModel: { description: 'sin contadores' } } });
+  const empty = await captureInnertube({ getChannel: async () => channelReturning(missing) }, channelId, new Date('2026-10-23T00:00:00.000Z'));
+  assert.equal(empty.totalViews.value, null);
+  assert.equal(empty.totalViews.precision, 'unknown');
+  assert.equal(empty.videoCount.value, null);
+  const full = new YTNodes.ChannelAboutFullMetadata({
+    channelId, title: { simpleText: 'T' }, viewCountText: { simpleText: '1,234 views' },
+    description: { simpleText: 'd' }, country: { simpleText: 'US' }, avatar: { thumbnails: [] },
+    canonicalChannelUrl: `https://www.youtube.com/channel/${channelId}`,
+  });
+  const fromFull = await captureInnertube({ getChannel: async () => channelReturning(full) }, channelId, new Date('2026-10-23T00:00:00.000Z'));
+  assert.equal(fromFull.totalViews.value, 1234);
+  assert.equal(fromFull.videoCount.value, null);
 });
 
 test('official API stays disabled until storage retention is acknowledged', async () => {
