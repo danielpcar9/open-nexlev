@@ -8,7 +8,7 @@ export default defineContentScript({
     const BADGE_CLASS = 'open-nexlev-outlier-badge';
     const TOOLBAR_ID = 'open-nexlev-watch-toolbar';
 
-    // 1. Inyectar estilos CSS limpios para los badges sobre miniaturas y la barra de herramientas del reproductor
+    // 1. Inyectar estilos CSS modernos para los badges sobre miniaturas y la barra de herramientas del reproductor
     const style = document.createElement('style');
     style.textContent = `
       .${BADGE_CLASS} {
@@ -19,25 +19,25 @@ export default defineContentScript({
         display: flex;
         gap: 6px;
         align-items: center;
-        padding: 4px 8px;
-        border-radius: 6px;
-        font-family: 'Roboto', sans-serif;
-        font-size: 12px;
+        padding: 4px 10px;
+        border-radius: 999px;
+        font-family: 'Inter', 'Roboto', sans-serif;
+        font-size: 11px;
         font-weight: 700;
         color: #ffffff;
-        backdrop-filter: blur(8px);
-        box-shadow: 0 2px 10px rgba(0,0,0,0.45);
+        backdrop-filter: blur(12px);
+        box-shadow: 0 4px 14px rgba(0,0,0,0.5);
         pointer-events: none;
-        letter-spacing: 0.3px;
+        letter-spacing: 0.25px;
       }
-      .nexlev-tier-normal { background: rgba(30, 41, 59, 0.85); border: 1px solid rgba(255,255,255,0.15); }
-      .nexlev-tier-good   { background: rgba(22, 163, 74, 0.92); border: 1px solid #4ade80; }
-      .nexlev-tier-viral  { background: linear-gradient(135deg, #7c3aed, #db2777); border: 1px solid #f472b6; }
+      .nexlev-tier-normal { background: rgba(10, 14, 22, 0.86); border: 1px solid rgba(255,255,255,0.14); }
+      .nexlev-tier-good   { background: linear-gradient(135deg, rgba(124, 58, 237, 0.94), rgba(79, 70, 229, 0.94)); border: 1px solid rgba(196, 181, 253, 0.45); }
+      .nexlev-tier-viral  { background: linear-gradient(135deg, #f43f5e, #f59e0b); border: 1px solid rgba(255, 255, 255, 0.35); box-shadow: 0 4px 16px rgba(244, 63, 94, 0.45); }
       .nexlev-vph {
         font-size: 10px;
-        font-weight: 500;
-        opacity: 0.9;
-        border-left: 1px solid rgba(255,255,255,0.3);
+        font-weight: 600;
+        opacity: 0.92;
+        border-left: 1px solid rgba(255,255,255,0.28);
         padding-left: 6px;
       }
       #${TOOLBAR_ID} {
@@ -45,43 +45,49 @@ export default defineContentScript({
         flex-wrap: wrap;
         gap: 8px;
         align-items: center;
-        margin: 10px 0;
+        margin: 12px 0;
         padding: 10px 14px;
-        border-radius: 10px;
-        background: rgba(15, 23, 42, 0.9);
-        border: 1px solid rgba(124, 58, 237, 0.45);
-        font-family: 'Roboto', sans-serif;
+        border-radius: 14px;
+        background: rgba(12, 16, 25, 0.88);
+        backdrop-filter: blur(16px);
+        border: 1px solid rgba(139, 92, 246, 0.4);
+        box-shadow: 0 8px 24px -8px rgba(0, 0, 0, 0.5);
+        font-family: 'Inter', 'Roboto', sans-serif;
         color: #f8fafc;
       }
       .nexlev-btn {
         cursor: pointer;
-        border: 1px solid rgba(255,255,255,0.18);
-        background: rgba(30, 41, 59, 0.95);
+        border: 1px solid rgba(255,255,255,0.12);
+        background: rgba(25, 33, 50, 0.95);
         color: #f8fafc;
         font-size: 12px;
         font-weight: 600;
         padding: 6px 12px;
-        border-radius: 6px;
-        transition: all 0.15s ease;
+        border-radius: 8px;
+        transition: all 0.16s ease;
         display: inline-flex;
         align-items: center;
         gap: 6px;
       }
       .nexlev-btn:hover {
-        background: #7c3aed;
-        border-color: #a78bfa;
+        background: linear-gradient(135deg, #8b5cf6, #6366f1);
+        border-color: rgba(255, 255, 255, 0.25);
+        transform: translateY(-1px);
       }
       .nexlev-brand {
-        font-size: 12px;
+        font-size: 11px;
         font-weight: 800;
-        color: #c084fc;
+        color: #c4b5fd;
         margin-right: 6px;
-        letter-spacing: 0.4px;
+        letter-spacing: 0.6px;
+        padding: 4px 8px;
+        border-radius: 6px;
+        background: rgba(139, 92, 246, 0.16);
+        border: 1px solid rgba(139, 92, 246, 0.35);
       }
     `;
     document.head.appendChild(style);
 
-    // 2. Parser de vistas multi-idioma (Inglés y Español: "120 K vistas", "1.4M views")
     function parseViews(text: string): number {
       const clean = text.replace(/,/g, '.').toUpperCase();
       const match = clean.match(/([\d.]+)\s*(MIL|K|M|B)?/);
@@ -101,7 +107,6 @@ export default defineContentScript({
       return Math.round(num);
     }
 
-    // 3. Estimador de Horas desde publicación para calcular VPH (Vistas por Hora)
     function parseHoursAgo(text: string): number {
       const lower = text.toLowerCase();
       const match = lower.match(/(\d+)/);
@@ -124,7 +129,6 @@ export default defineContentScript({
       return sorted.length % 2 !== 0 ? sorted[mid]! : (sorted[mid - 1]! + sorted[mid]!) / 2;
     }
 
-    // 4. Extractor de Transcripción en 1 clic directamente desde ytInitialPlayerResponse (timedtext)
     async function extractCleanTranscript(withTimestamps = false): Promise<string> {
       const videoId = new URLSearchParams(window.location.search).get('v');
       if (!videoId) throw new Error('No se detectó ID de video.');
@@ -135,7 +139,6 @@ export default defineContentScript({
         : transcript.cleanText;
     }
 
-    // 5. Inyectar barra de herramientas en páginas de reproducción (/watch?v=...)
     function injectWatchToolbar() {
       if (!window.location.pathname.startsWith('/watch')) return;
       if (document.getElementById(TOOLBAR_ID)) return;
@@ -146,10 +149,10 @@ export default defineContentScript({
       const toolbar = document.createElement('div');
       toolbar.id = TOOLBAR_ID;
       toolbar.innerHTML = `
-        <span class="nexlev-brand">⚡ OPEN-NEXLEV</span>
-        <button class="nexlev-btn" id="nexlev-copy-clean">📋 Copiar Guion Limpio (1-Clic)</button>
-        <button class="nexlev-btn" id="nexlev-copy-timestamps">⏱️ Copiar con Timestamps</button>
-        <button class="nexlev-btn" id="nexlev-download-thumb">🖼️ Miniatura HD (MaxRes)</button>
+        <span class="nexlev-brand">ON · OPEN-NEXLEV</span>
+        <button class="nexlev-btn" id="nexlev-copy-clean">📋 Copiar Guion Limpio</button>
+        <button class="nexlev-btn" id="nexlev-copy-timestamps">⏱️ Con Timestamps</button>
+        <button class="nexlev-btn" id="nexlev-download-thumb">🖼️ Miniatura MaxRes</button>
       `;
 
       targetContainer.parentElement.insertBefore(toolbar, targetContainer.nextSibling);
@@ -199,7 +202,6 @@ export default defineContentScript({
       });
     }
 
-    // 6. Escáner de tarjetas de video en el DOM (Outlier Score + VPH)
     function processYouTubeGrid() {
       injectWatchToolbar();
 
@@ -262,7 +264,6 @@ export default defineContentScript({
       }
     }
 
-    // 7. Observar cambios en el DOM (navegación SPA de YouTube y scroll infinito)
     let timeoutId: number | null = null;
     const observer = new MutationObserver(() => {
       if (timeoutId) window.clearTimeout(timeoutId);
