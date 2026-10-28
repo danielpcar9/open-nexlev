@@ -20,34 +20,39 @@ export function TrackingPanel() {
   const load = () => api('/api/tracking').then(data => setChannels(data.channels)).catch(err => setError(err.message));
   useEffect(() => { load(); }, []);
   return (
-    <section style={{ background: '#111827', border: '1px solid #1f2937', borderRadius: 12, padding: 20 }}>
-      <h2 style={{ marginTop: 0 }}>Seguimiento</h2>
-      <p style={{ color: '#94a3b8', fontSize: 13 }}>Guardar en el Swipe File no sigue el canal. Seguir conserva observaciones; dejar de seguir no las borra.</p>
-      {error && <p role="alert" style={{ color: '#fca5a5' }}>{error}</p>}
-      <form onSubmit={async event => { event.preventDefault(); setError(''); try { await api('/api/tracking', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ channelId }) }); setChannelId(''); await load(); } catch (err) { setError(err instanceof Error ? err.message : 'Error'); } }} style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
-        <input aria-label="ID de canal a seguir" value={channelId} onChange={event => setChannelId(event.target.value)} placeholder="UCxxxxxxxxxxxxxxxxxxxxxx" style={{ flex: 1, padding: 10, borderRadius: 8, border: '1px solid #374151', background: '#030712', color: '#fff' }} />
-        <button style={{ padding: '10px 14px', border: 0, borderRadius: 8, background: '#7c3aed', color: '#fff', fontWeight: 700 }}>Seguir canal</button>
+    <section className="panel">
+      <h2>Seguimiento</h2>
+      <p className="lede">Guardar en el Swipe File no sigue el canal. Seguir conserva observaciones; dejar de seguir no las borra.</p>
+      {error && <p role="alert" className="alert">{error}</p>}
+      <form className="inline" onSubmit={async event => { event.preventDefault(); setError(''); try { await api('/api/tracking', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ channelId }) }); setChannelId(''); await load(); } catch (err) { setError(err instanceof Error ? err.message : 'Error'); } }}>
+        <label className="field">
+          <span>Canal</span>
+          <input aria-label="ID de canal a seguir" value={channelId} onChange={event => setChannelId(event.target.value)} placeholder="UCxxxxxxxxxxxxxxxxxxxxxx" />
+        </label>
+        <button className="btn primary" type="submit">Seguir canal</button>
       </form>
       {channels.map(channel => (
-        <article key={channel.channelId} style={{ borderTop: '1px solid #1f2937', padding: '12px 0' }}>
-          <strong>{channel.title}</strong> <span style={{ color: '#94a3b8' }}>{channel.channelId}</span>
-          <div style={{ color: '#cbd5e1', fontSize: 13, margin: '6px 0' }}>
+        <article className="row" key={channel.channelId}>
+          <strong>{channel.title}</strong>
+          <span className="meta num">{channel.channelId}</span>
+          <p className="meta">
             {channel.active ? 'Activo' : 'Pausado'} · {channel.provider} · calidad: {channel.quality} · próximo vencimiento: {new Date(channel.nextDueAt).toLocaleString()} · último éxito: {channel.lastSuccessAt ? new Date(channel.lastSuccessAt).toLocaleString() : 'nunca'} {channel.lastError ? `· último error: ${channel.lastError}` : ''}
-          </div>
-          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-            <button type="button" onClick={async () => { setError(''); try { const data = await api(`/api/tracking/${channel.channelId}/refresh`, { method: 'POST' }); setJob(`${data.jobId} (${data.status}${data.created ? '' : ', ya en curso'})`); } catch (err) { setError(err instanceof Error ? err.message : 'Error'); } }}>Actualizar ahora</button>
-            <button type="button" onClick={async () => { setError(''); try { setHistory((await api(`/api/tracking/${channel.channelId}/history?window=7d`)).history); } catch (err) { setError(err instanceof Error ? err.message : 'Error'); } }}>Ver historial</button>
-            <button type="button" onClick={async () => { setError(''); try { await api(`/api/tracking/${channel.channelId}`, { method: 'DELETE' }); await load(); } catch (err) { setError(err instanceof Error ? err.message : 'Error'); } }}>Dejar de seguir</button>
-            <button type="button" onClick={async () => { if (!confirm('Esto borra las observaciones de este canal.')) return; setError(''); try { await api(`/api/tracking/${channel.channelId}/history`, { method: 'DELETE' }); setHistory(null); } catch (err) { setError(err instanceof Error ? err.message : 'Error'); } }}>Borrar historial</button>
+          </p>
+          <div className="toolbar">
+            <button className="btn tiny" type="button" onClick={async () => { setError(''); try { const data = await api(`/api/tracking/${channel.channelId}/refresh`, { method: 'POST' }); setJob(`${data.jobId} (${data.status}${data.created ? '' : ', ya en curso'})`); } catch (err) { setError(err instanceof Error ? err.message : 'Error'); } }}>Actualizar ahora</button>
+            <button className="btn tiny" type="button" onClick={async () => { setError(''); try { setHistory((await api(`/api/tracking/${channel.channelId}/history?window=7d`)).history); } catch (err) { setError(err instanceof Error ? err.message : 'Error'); } }}>Ver historial</button>
+            <button className="btn tiny" type="button" onClick={async () => { setError(''); try { await api(`/api/tracking/${channel.channelId}`, { method: 'DELETE' }); await load(); } catch (err) { setError(err instanceof Error ? err.message : 'Error'); } }}>Dejar de seguir</button>
+            <button className="btn tiny" type="button" onClick={async () => { if (!confirm('Esto borra las observaciones de este canal.')) return; setError(''); try { await api(`/api/tracking/${channel.channelId}/history`, { method: 'DELETE' }); setHistory(null); } catch (err) { setError(err instanceof Error ? err.message : 'Error'); } }}>Borrar historial</button>
           </div>
         </article>
       ))}
-      {job && <p>Trabajo: {job}. La captura no bloquea esta página.</p>}
+      {channels.length === 0 && <p className="empty">Ningún canal en seguimiento.</p>}
+      {job && <p className="meta">Trabajo: <span className="num">{job}</span>. La captura no bloquea esta página.</p>}
       {history && (
-        <div style={{ marginTop: 16 }}>
-          <h3>Historial {history.channelId}</h3>
-          <p>{history.note}</p>
-          {history.points.length === 0 && <p>Sin historial todavía.</p>}
+        <div>
+          <h3>Historial <span className="num">{history.channelId}</span></h3>
+          <p className="lede">{history.note}</p>
+          {history.points.length === 0 && <p className="empty">Sin historial todavía.</p>}
           {(['h24', 'd7', 'd30'] as const).map(key => {
             const window = history.windows[key] as WindowMetric;
             return <p key={key}><strong>{key}:</strong> {window.quality} · delta {window.delta ?? '—'} · {window.explanation}</p>;

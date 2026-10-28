@@ -12,7 +12,7 @@ export function WorkerBanner() {
   }, []);
   if (!status) return null;
   return (
-    <p role="status" style={{ margin: '0 0 16px', padding: '10px 12px', borderRadius: 8, background: status.running ? '#052e16' : '#451a1a', color: status.running ? '#bbf7d0' : '#fecaca', fontSize: 13 }}>
+    <p role="status" className={status.running ? 'banner banner-ok' : 'banner banner-stop'}>
       {status.message} {status.lastSeenAt ? `Último heartbeat: ${new Date(status.lastSeenAt).toLocaleString()}.` : ''} Comando: <code>{status.command}</code>
     </p>
   );
