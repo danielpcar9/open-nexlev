@@ -132,6 +132,7 @@ export const researchProjects = sqliteTable('research_projects', {
   createdAt: integer('created_at').notNull(),
   updatedAt: integer('updated_at').notNull(),
   lastScore: text('last_score'),
+  configRevision: integer('config_revision').notNull().default(0),
 });
 
 export const researchMembers = sqliteTable('research_members', {

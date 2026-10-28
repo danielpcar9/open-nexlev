@@ -179,8 +179,10 @@ export function patchProject(sqlite: Database.Database, id: string, input: { nam
       sqlite.prepare(`UPDATE research_members SET in_sample = 0 WHERE project_id = ?`).run(id);
       sqlite.prepare(`UPDATE research_videos SET in_sample = 0 WHERE project_id = ?`).run(id);
       sqlite.prepare(`UPDATE research_projects SET last_score = NULL WHERE id = ?`).run(id);
+      retireResearchRun(sqlite, id, Date.now());
     } else if (input.weights || input.competitorMedianThreshold != null) {
       sqlite.prepare(`UPDATE research_projects SET last_score = NULL WHERE id = ?`).run(id);
+      retireResearchRun(sqlite, id, Date.now());
     }
   }).immediate();
   return getProject(sqlite, id);
@@ -228,9 +230,21 @@ function upsertMember(sqlite: Database.Database, projectId: string, queryText: s
   }
 }
 
+function retireResearchRun(sqlite: Database.Database, projectId: string, now: number) {
+  sqlite.prepare(`UPDATE research_projects SET config_revision = config_revision + 1 WHERE id = ?`).run(projectId);
+  sqlite.prepare(`UPDATE jobs SET cancel_requested = 1 WHERE dedupe_key = ? AND status = 'running'`).run(`research:${projectId}`);
+  sqlite.prepare(`UPDATE jobs SET status = 'cancelled', finished_at = ?, cancel_requested = 1, progress = 'cancelado', lease_owner = NULL, lease_until = NULL, lease_token = NULL WHERE dedupe_key = ? AND status = 'queued'`).run(now, `research:${projectId}`);
+}
+
+function projectRevision(sqlite: Database.Database, projectId: string): number | null {
+  const row = sqlite.prepare(`SELECT config_revision AS revision FROM research_projects WHERE id = ?`).get(projectId) as { revision: number } | undefined;
+  return row?.revision ?? null;
+}
+
 export function queueResearch(sqlite: Database.Database, projectId: string, now = Date.now()) {
-  if (!sqlite.prepare(`SELECT id FROM research_projects WHERE id = ?`).get(projectId)) throw new HttpError(404, 'Investigación no encontrada');
-  const job = enqueueJob(sqlite, { type: 'research_run', payload: { projectId }, dedupeKey: `research:${projectId}`, now });
+  const revision = projectRevision(sqlite, projectId);
+  if (revision == null) throw new HttpError(404, 'Investigación no encontrada');
+  const job = enqueueJob(sqlite, { type: 'research_run', payload: { projectId, revision }, dedupeKey: `research:${projectId}`, now });
   return { jobId: job.job.id, created: job.created, status: job.job.status };
 }
 
@@ -257,17 +271,25 @@ export async function executeResearchJob(sqlite: Database.Database, job: JobRow,
   const token = job.lease_token;
   if (!token) return;
   const now = () => control.now?.() ?? Date.now();
-  const projectId = (JSON.parse(job.payload) as { projectId: string }).projectId;
+  const payload = JSON.parse(job.payload) as { projectId: string; revision?: number };
+  const projectId = payload.projectId;
+  const revision = projectRevision(sqlite, projectId);
+  if (revision == null || !token) return;
+  if (typeof payload.revision === 'number' && payload.revision !== revision) {
+    settleCancelled(sqlite, job.id, token, now());
+    return;
+  }
   const queries = sqlite.prepare(`SELECT * FROM research_queries WHERE project_id = ?`).all(projectId) as QueryRow[];
   const abort = new AbortController();
   const stopRenewal = holdLease(sqlite, job.id, token, { ...control, leaseMs: control.leaseMs ?? LEASE_MS }, () => abort.abort());
   const seen = new Map<string, SeenChannel>();
   let allComplete = queries.length > 0;
+  const stale = () => projectRevision(sqlite, projectId) !== revision;
   try {
     for (const query of queries) {
       const at = now();
       const gate = jobOwnership(sqlite, job.id, token, at);
-      if (gate === 'cancelled') { settleCancelled(sqlite, job.id, token, at); return; }
+      if (gate === 'cancelled' || stale()) { settleCancelled(sqlite, job.id, token, at); return; }
       if (gate !== 'owned' || abort.signal.aborted) return;
       sqlite.prepare(`UPDATE research_queries SET status = 'running', started_at = ?, error = NULL WHERE id = ?`).run(at, query.id);
       let result: ResearchSearch;
@@ -275,7 +297,7 @@ export async function executeResearchJob(sqlite: Database.Database, job: JobRow,
       catch (error) { result = { ok: false, partial: false, error: error instanceof Error ? error.message : 'Fallo de búsqueda', channels: [] }; }
       const finished = now();
       const still = jobOwnership(sqlite, job.id, token, finished);
-      if (still === 'cancelled') { settleCancelled(sqlite, job.id, token, finished); return; }
+      if (still === 'cancelled' || stale()) { settleCancelled(sqlite, job.id, token, finished); return; }
       if (still !== 'owned') return;
       const status = result.ok && !result.partial ? 'complete' : result.channels.length ? 'partial' : 'failed';
       if (status !== 'complete') allComplete = false;
@@ -284,11 +306,17 @@ export async function executeResearchJob(sqlite: Database.Database, job: JobRow,
     }
     const at = now();
     const gate = jobOwnership(sqlite, job.id, token, at);
-    if (gate === 'cancelled') { settleCancelled(sqlite, job.id, token, at); return; }
+    if (gate === 'cancelled' || stale()) { settleCancelled(sqlite, job.id, token, at); return; }
     if (gate !== 'owned') return;
     let committed = false;
     sqlite.transaction(() => {
-      if (jobOwnership(sqlite, job.id, token, at) !== 'owned') return;
+      const gate = jobOwnership(sqlite, job.id, token, at);
+      const current = projectRevision(sqlite, projectId);
+      if (gate === 'cancelled' || current !== revision) {
+        settleCancelled(sqlite, job.id, token, at);
+        return;
+      }
+      if (gate !== 'owned') return;
       applySeen(sqlite, projectId, seen, at, allComplete);
       const info = sqlite.prepare(`UPDATE jobs SET status = 'succeeded', finished_at = ?, progress = 'listo', error = NULL, lease_owner = NULL, lease_until = NULL, lease_token = NULL WHERE id = ? AND lease_token = ? AND cancel_requested = 0 AND status = 'running' AND lease_until > ?`).run(at, job.id, token, at);
       if (info.changes !== 1) throw new Error('LEASE_LOST');
