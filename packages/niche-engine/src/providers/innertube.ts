@@ -53,6 +53,25 @@ function publishedInstant(video: { published?: { text?: string; timestamp?: numb
   return { publishedAt: null, publishedText: relative };
 }
 
+type CounterSource = { view_count?: unknown; video_count?: unknown; metadata?: CounterSource | null };
+
+function counterText(value: unknown): string | null {
+  if (typeof value === 'string') return value.trim() || null;
+  if (value && typeof value === 'object' && 'text' in value) {
+    const text = (value as { text?: unknown }).text;
+    return typeof text === 'string' && text.trim() ? text.trim() : null;
+  }
+  return null;
+}
+
+/** AboutChannel keeps counters on metadata; ChannelAboutFullMetadata keeps them on the node. */
+export function readAboutCounters(about: unknown): { views: string | null; videos: string | null } {
+  if (!about || typeof about !== 'object') return { views: null, videos: null };
+  const node = about as CounterSource;
+  const source = node.metadata && typeof node.metadata === 'object' ? node.metadata : node;
+  return { views: counterText(source.view_count), videos: counterText(source.video_count) };
+}
+
 type InnertubeLike = { getChannel(id: string): Promise<any> };
 
 export async function captureInnertube(yt: InnertubeLike, channelId: string, now = new Date()): Promise<ChannelCapture> {
@@ -68,10 +87,9 @@ export async function captureInnertube(yt: InnertubeLike, channelId: string, now
   let videosCount = metric(null);
   try {
     const about = await channel.getAbout?.();
-    const viewRaw = typeof about?.view_count === 'string' ? about.view_count : textOf(about?.view_count);
-    const countRaw = typeof about?.video_count === 'string' ? about.video_count : textOf(about?.video_count);
-    if (viewRaw) total = metric(viewRaw);
-    if (countRaw) videosCount = metric(countRaw);
+    const counters = readAboutCounters(about);
+    if (counters.views) total = metric(counters.views);
+    if (counters.videos) videosCount = metric(counters.videos);
   } catch (error) {
     if (error instanceof EngineError && error.code === 'TIMEOUT') throw error;
   }

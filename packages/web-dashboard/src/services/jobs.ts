@@ -17,12 +17,37 @@ export type JobRow = {
   next_attempt_at: number;
   lease_owner: string | null;
   lease_until: number | null;
+  lease_token: string | null;
   progress: string | null;
   error: string | null;
   cancel_requested: number;
 };
 
-const RETURNING = `id, type, payload, dedupe_key, status, created_at, started_at, finished_at, attempts, max_attempts, next_attempt_at, lease_owner, lease_until, progress, error, cancel_requested`;
+const RETURNING = `id, type, payload, dedupe_key, status, created_at, started_at, finished_at, attempts, max_attempts, next_attempt_at, lease_owner, lease_until, lease_token, progress, error, cancel_requested`;
+
+export const LEASE_MS = 60_000;
+
+export type Ownership = 'owned' | 'lost' | 'cancelled';
+
+export function jobOwnership(sqlite: Database.Database, id: string, token: string | null, now = Date.now()): Ownership {
+  const job = getJob(sqlite, id);
+  if (!job || !token || job.status !== 'running' || job.lease_token !== token) return 'lost';
+  if (job.cancel_requested) return 'cancelled';
+  if (job.lease_until == null || job.lease_until <= now) return 'lost';
+  return 'owned';
+}
+
+export function settleCancelled(sqlite: Database.Database, id: string, token: string, now = Date.now()): boolean {
+  const info = sqlite.prepare(`UPDATE jobs SET status = 'cancelled', finished_at = ?, progress = 'cancelado', lease_owner = NULL, lease_until = NULL, lease_token = NULL, error = NULL
+    WHERE id = ? AND lease_token = ? AND status = 'running'`).run(now, id, token);
+  return info.changes === 1;
+}
+
+export function recoverCancelledLeases(sqlite: Database.Database, now = Date.now()): number {
+  const info = sqlite.prepare(`UPDATE jobs SET status = 'cancelled', finished_at = ?, progress = 'cancelado', lease_owner = NULL, lease_until = NULL, lease_token = NULL
+    WHERE status = 'running' AND cancel_requested = 1 AND (lease_until IS NULL OR lease_until < ?)`).run(now, now);
+  return info.changes;
+}
 
 export function getJob(sqlite: Database.Database, id: string): JobRow | null {
   return (sqlite.prepare(`SELECT ${RETURNING} FROM jobs WHERE id = ?`).get(id) as JobRow | undefined) ?? null;
@@ -55,21 +80,43 @@ export function enqueueJob(sqlite: Database.Database, input: { type: string; pay
 
 export function claimJob(sqlite: Database.Database, owner: string, leaseMs: number, now = Date.now()): JobRow | null {
   const claim = sqlite.transaction(() => {
+    recoverCancelledLeases(sqlite, now);
     const row = sqlite.prepare(`SELECT id, status, attempts FROM jobs
       WHERE cancel_requested = 0 AND ((status = 'queued' AND next_attempt_at <= ?) OR (status = 'running' AND lease_until IS NOT NULL AND lease_until < ?))
       ORDER BY next_attempt_at, created_at LIMIT 1`).get(now, now) as { id: string; status: JobStatus; attempts: number } | undefined;
     if (!row) return null;
     const attempts = row.status === 'queued' ? row.attempts + 1 : row.attempts;
-    const info = sqlite.prepare(`UPDATE jobs SET status = 'running', lease_owner = ?, lease_until = ?, started_at = COALESCE(started_at, ?), attempts = ?
-      WHERE id = ? AND cancel_requested = 0 AND ((status = 'queued' AND next_attempt_at <= ?) OR (status = 'running' AND lease_until IS NOT NULL AND lease_until < ?))`).run(owner, now + leaseMs, now, attempts, row.id, now, now);
+    const token = randomUUID();
+    const info = sqlite.prepare(`UPDATE jobs SET status = 'running', lease_owner = ?, lease_until = ?, lease_token = ?, started_at = COALESCE(started_at, ?), attempts = ?
+      WHERE id = ? AND cancel_requested = 0 AND ((status = 'queued' AND next_attempt_at <= ?) OR (status = 'running' AND lease_until IS NOT NULL AND lease_until < ?))`).run(owner, now + leaseMs, token, now, attempts, row.id, now, now);
     if (info.changes !== 1) return null;
     return getJob(sqlite, row.id);
   });
   return claim.immediate();
 }
 
-export function renewLease(sqlite: Database.Database, id: string, owner: string, leaseMs: number, now = Date.now()): void {
-  sqlite.prepare(`UPDATE jobs SET lease_until = ? WHERE id = ? AND lease_owner = ? AND status = 'running'`).run(now + leaseMs, id, owner);
+export function renewLease(sqlite: Database.Database, id: string, token: string, leaseMs: number, now = Date.now()): boolean {
+  const info = sqlite.prepare(`UPDATE jobs SET lease_until = ? WHERE id = ? AND lease_token = ? AND status = 'running' AND cancel_requested = 0`).run(now + leaseMs, id, token);
+  return info.changes === 1;
+}
+
+export type LeaseControl = {
+  leaseMs?: number;
+  now?: () => number;
+  setInterval?: (fn: () => void, ms: number) => unknown;
+  clearInterval?: (handle: unknown) => void;
+};
+
+export function holdLease(sqlite: Database.Database, id: string, token: string, control: LeaseControl, onStop: () => void): () => void {
+  const leaseMs = control.leaseMs ?? LEASE_MS;
+  const now = control.now ?? (() => Date.now());
+  const schedule = control.setInterval ?? ((fn, ms) => setInterval(fn, ms));
+  const clear = control.clearInterval ?? (handle => clearInterval(handle as ReturnType<typeof setInterval>));
+  const handle = schedule(() => {
+    const current = getJob(sqlite, id);
+    if (!current || current.lease_token !== token || current.status !== 'running' || current.cancel_requested || !renewLease(sqlite, id, token, leaseMs, now())) onStop();
+  }, Math.max(5, Math.floor(leaseMs / 3)));
+  return () => clear(handle);
 }
 
 export function cancelJob(sqlite: Database.Database, id: string, now = Date.now()): JobRow | null {

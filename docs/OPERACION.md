@@ -15,7 +15,9 @@ npm run worker          # obligatorio para capturas y búsquedas automáticas
 
 `npm run worker` también puede lanzarse desde otro directorio: la base relativa se resuelve siempre contra `packages/web-dashboard`. Sin el worker, el panel dice «actualización automática detenida». Apagar el equipo detiene el seguimiento; no se recuperan las capturas perdidas, solo se encola una foto actual por canal vencido.
 
-El worker atiende como máximo dos solicitudes concurrentes al proveedor (`PROVIDER_CONCURRENCY`, 1–4, por defecto 2). Cierra con SIGINT o SIGTERM: deja de reclamar trabajos y espera la petición ya iniciada hasta el siguiente punto de control. Una cancelación confirmada antes de guardar no se publica como éxito. Una petición HTTP ya empezada no se aborta a mitad de la respuesta de YouTube.
+Un fallo transitorio (tiempo de espera, límite o fallo de red) reintenta el mismo trabajo, como máximo tres veces, y no abre otra captura. Un fallo definitivo (`RESTRICTED`, `INVALID`, `NO_DATA`) o el tercer fallo transitorio cierra el trabajo y aplaza la siguiente captura automática: el intervalo del canal, duplicado por cada fallo seguido (hasta 6), con un tope de 7 días, y nunca antes de `Retry-After` si el proveedor lo envió. El refresco manual no espera ese plazo.
+
+El worker atiende como máximo dos solicitudes concurrentes al proveedor (`PROVIDER_CONCURRENCY`, 1–4, por defecto 2). Cada reclamación lleva un token propio, también si las dos corren en el mismo proceso. El arrendamiento dura 60 s y se renueva mientras el trabajo sigue en curso. Si el token ya no coincide o el arrendamiento venció, el resultado se descarta: el propietario anterior no puede guardar observaciones ni cambiar el estado. Cierra con SIGINT o SIGTERM: deja de reclamar trabajos y espera la petición ya iniciada hasta el siguiente punto de control. Una cancelación confirmada antes de guardar no se publica como éxito. Si la llamada falla después de cancelar, el trabajo queda `cancelled` y no se reintenta. Una cancelación de un proceso que murió se cierra al vencer el arrendamiento; a partir de ahí un refresco manual crea un trabajo nuevo. Una petición HTTP ya empezada no se aborta a mitad de la respuesta de YouTube, pero su resultado no se escribe si se perdió la propiedad.
 
 ## Qué es observado y qué es estimado
 
@@ -33,7 +35,7 @@ La primera captura marca outliers ya visibles como hallazgos iniciales. Después
 
 ## Investigación y score v1
 
-Las consultas de referentes y de competencia se guardan tal como se escriben. El rol, las etiquetas, las notas y el idioma corregido a mano prevalecen. Una búsqueda fallida deja el componente de competencia como desconocido: no significa que no haya competencia.
+Las consultas de referentes y de competencia se guardan tal como se escriben. El rol, las etiquetas, las notas y el idioma corregido a mano prevalecen y no se borran al cambiar la muestra. Una ejecución completa sustituye la muestra activa, también cuando el resultado válido es vacío. Una ejecución parcial queda etiquetada como tal y no se presenta como la muestra completa de las consultas nuevas. Cambiar consultas, pesos, umbral o un rol manual invalida el score hasta recalcularlo. Una búsqueda fallida deja el componente de competencia como desconocido: no significa que no haya competencia.
 
 El score es una heurística versionada (`v1`), no una probabilidad de éxito. Hacen falta cinco investigaciones completas y comparables (mismas consultas, presupuesto, filtros y frescura) para percentiles. El percentil usa el rango medio de los empates: se ordena de menor a mayor, el rango es la posición 1-based media y el percentil es `(rango - 1) / (n - 1) × 100`. La competencia usa el percentil inverso. Si falta un componente no vale 0 ni 100. Con menos del 70% del peso disponible el resultado es «datos insuficientes». Los pesos enteros deben sumar 100.
 
