@@ -2,8 +2,8 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { EngineError, type ChannelCapture } from '@open-nexlev/niche-engine';
 import { tempDatabase } from '../db/test-utils';
-import { executeCaptureJob } from './capture';
-import { claimJob, enqueueDueCaptures, enqueueJob, getJob, type LeaseControl } from './jobs';
+import { executeCaptureJob, nextPeriodicCaptureAt } from './capture';
+import { claimJob, enqueueDueCaptures, enqueueJob, getJob, jobOwnership, renewLease, type LeaseControl } from './jobs';
 import { cancelJob } from './jobs';
 import { createProject, executeResearchJob, getProject, patchMember, patchProject, scoreProject } from './research';
 import { followChannel, refreshChannel } from './tracking';
@@ -227,5 +227,57 @@ test('a partial research run stays labeled partial', async () => {
     assert.match(viewed.note, /parcial/i);
     assert.equal(viewed.members.length, 1);
     assert.equal(viewed.queries.find(query => query.query === 'competencia')?.status, 'failed');
+  } finally { db.close(); }
+});
+
+test('a clock jump past the lease cannot renew the same token', () => {
+  const db = tempDatabase();
+  try {
+    followChannel(db.sqlite, { channelId }, 0);
+    enqueueJob(db.sqlite, { type: 'capture', payload: { channelId }, dedupeKey: `capture:${channelId}`, now: 0 });
+    const first = claimJob(db.sqlite, 'worker', 60_000, 0);
+    assert.ok(first?.lease_token);
+    assert.equal(jobOwnership(db.sqlite, first.id, first.lease_token, 60_001), 'lost');
+    assert.equal(renewLease(db.sqlite, first.id, first.lease_token, 60_000, 60_001), false);
+    assert.equal(jobOwnership(db.sqlite, first.id, first.lease_token, 60_001), 'lost');
+    const second = claimJob(db.sqlite, 'worker', 60_000, 60_001);
+    assert.equal(second?.id, first.id);
+    assert.notEqual(second?.lease_token, first.lease_token);
+    assert.equal(renewLease(db.sqlite, first.id, first.lease_token!, 60_000, 60_001), false);
+  } finally { db.close(); }
+});
+
+test('Retry-After longer than seven days is not clipped by the local cap', () => {
+  const day = 86_400_000;
+  assert.equal(nextPeriodicCaptureAt(0, 6, 3, 10 * day), 10 * day);
+  assert.equal(nextPeriodicCaptureAt(0, 6, 1, 60_000), 6 * 3_600_000);
+  assert.equal(nextPeriodicCaptureAt(0, 1, 1, 2 * day), 2 * day);
+});
+
+test('a search that finishes after the queries change does not republish its channels', async () => {
+  const db = tempDatabase();
+  try {
+    const project = createProject(db.sqlite, { name: 'Fixture', referenceQueries: ['old'], competitionQueries: [] });
+    enqueueJob(db.sqlite, { type: 'research_run', payload: { projectId: project.id }, dedupeKey: `research:${project.id}` });
+    const first = claimJob(db.sqlite, 'worker', 60_000);
+    assert.ok(first);
+    await executeResearchJob(db.sqlite, first, async () => ({ ok: true, partial: false, channels: [{ channelId, title: 'OLD', subscribers: 10, videos: [{ id: 'abcdefghijk', title: 'Viejo titulo unico', views: 100, contentKind: 'long' }] }] }));
+    patchMember(db.sqlite, project.id, channelId, { notes: 'nota manual', tags: ['guardar'] });
+    enqueueJob(db.sqlite, { type: 'research_run', payload: { projectId: project.id }, dedupeKey: `research:${project.id}` });
+    const second = claimJob(db.sqlite, 'worker', 60_000);
+    assert.ok(second);
+    await executeResearchJob(db.sqlite, second, async () => {
+      patchProject(db.sqlite, project.id, { queries: [{ role: 'reference', query: 'new' }] });
+      return { ok: true, partial: false, channels: [{ channelId, title: 'OLD', subscribers: 10, videos: [{ id: 'abcdefghijk', title: 'Viejo titulo unico', views: 100, contentKind: 'long' }] }] };
+    });
+    const viewed = getProject(db.sqlite, project.id);
+    assert.equal(viewed.queries[0]?.query, 'new');
+    assert.equal(viewed.members.length, 0);
+    assert.equal(viewed.score, null);
+    assert.equal(getJob(db.sqlite, second.id)?.status, 'cancelled');
+    const stored = db.sqlite.prepare(`SELECT notes, tags, in_sample FROM research_members WHERE channel_id = ?`).get(channelId) as { notes: string; tags: string; in_sample: number };
+    assert.equal(stored.notes, 'nota manual');
+    assert.equal(stored.tags, '["guardar"]');
+    assert.equal(stored.in_sample, 0);
   } finally { db.close(); }
 });

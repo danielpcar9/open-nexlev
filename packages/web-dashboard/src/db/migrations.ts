@@ -205,4 +205,9 @@ export const MIGRATIONS: Migration[] = [
     ALTER TABLE research_members ADD COLUMN in_sample INTEGER NOT NULL DEFAULT 1;
     ALTER TABLE research_videos ADD COLUMN in_sample INTEGER NOT NULL DEFAULT 1;`,
   },
+  {
+    version: 7,
+    name: 'research_config_revision',
+    sql: `ALTER TABLE research_projects ADD COLUMN config_revision INTEGER NOT NULL DEFAULT 0;`,
+  },
 ];

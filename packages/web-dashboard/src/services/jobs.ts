@@ -96,7 +96,7 @@ export function claimJob(sqlite: Database.Database, owner: string, leaseMs: numb
 }
 
 export function renewLease(sqlite: Database.Database, id: string, token: string, leaseMs: number, now = Date.now()): boolean {
-  const info = sqlite.prepare(`UPDATE jobs SET lease_until = ? WHERE id = ? AND lease_token = ? AND status = 'running' AND cancel_requested = 0`).run(now + leaseMs, id, token);
+  const info = sqlite.prepare(`UPDATE jobs SET lease_until = ? WHERE id = ? AND lease_token = ? AND status = 'running' AND cancel_requested = 0 AND lease_until > ?`).run(now + leaseMs, id, token, now);
   return info.changes === 1;
 }
 

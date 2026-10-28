@@ -11,12 +11,13 @@ export type CaptureProvider = { capture(channelId: string, signal?: AbortSignal)
 const HOUR_MS = 60 * 60 * 1000;
 const MAX_BACKOFF_MS = 7 * 24 * HOUR_MS;
 
-/** Next automatic capture after a terminal failure. Job retries are a different clock. */
+/** Next automatic capture after a terminal failure. The 7 day cap bounds our backoff only; Retry-After can be longer. */
 export function nextPeriodicCaptureAt(now: number, intervalHours: number, consecutiveErrors: number, retryAfterMs?: number): number {
   const intervalMs = Math.min(Math.max(intervalHours, 1), 168) * HOUR_MS;
   const steps = Math.max(0, Math.min(consecutiveErrors, 6) - 1);
-  const backoff = intervalMs * 2 ** steps;
-  return now + Math.min(Math.max(backoff, retryAfterMs ?? 0), MAX_BACKOFF_MS);
+  const backoff = Math.min(intervalMs * 2 ** steps, MAX_BACKOFF_MS);
+  const retryAfter = Math.max(0, retryAfterMs ?? 0);
+  return now + Math.max(backoff, retryAfter);
 }
 
 function insertObservation(sqlite: Database.Database, capture: ChannelCapture): void {
